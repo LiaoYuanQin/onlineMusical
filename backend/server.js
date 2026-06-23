@@ -4,6 +4,7 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -13,6 +14,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const JWT_SECRET = 'knowledge_sharing_jwt_secret_key';
+const KNOWLEDGE_DIR = path.join(__dirname, '../knowledge');
+
+if (!fs.existsSync(KNOWLEDGE_DIR)) {
+  fs.mkdirSync(KNOWLEDGE_DIR, { recursive: true });
+}
 
 let users = [];
 let knowledge = [];
@@ -29,6 +35,79 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
+
+const saveKnowledgeToFile = (item) => {
+  const mdContent = `---
+title: "${item.title}"
+description: "${item.description}"
+tags: ${JSON.stringify(item.tags)}
+author: ${item.author}
+createdAt: ${item.createdAt}
+updatedAt: ${item.updatedAt}
+---
+
+# ${item.title}
+
+## 描述
+
+${item.description}
+
+## 正文
+
+${item.content}
+
+${item.files.length > 0 ? '## 附件\n\n' + item.files.map(f => `- [${f.originalName}](/uploads/${f.filename})`).join('\n') : ''}
+`;
+  fs.writeFileSync(path.join(KNOWLEDGE_DIR, `${item.id}.md`), mdContent);
+};
+
+const loadKnowledgeFromFiles = () => {
+  try {
+    const files = fs.readdirSync(KNOWLEDGE_DIR);
+    files.forEach(file => {
+      if (file.endsWith('.md')) {
+        const id = parseInt(file.replace('.md', ''));
+        if (!isNaN(id) && !knowledge.find(k => k.id === id)) {
+          const content = fs.readFileSync(path.join(KNOWLEDGE_DIR, file), 'utf8');
+          const match = content.match(/---\n([\s\S]*?)\n---/);
+          if (match) {
+            const meta = match[1];
+            const titleMatch = meta.match(/title:\s*"(.*?)"/);
+            const descMatch = meta.match(/description:\s*"(.*?)"/);
+            const tagsMatch = meta.match(/tags:\s*(.*)/);
+            const authorMatch = meta.match(/author:\s*(\d+)/);
+            const createdAtMatch = meta.match(/createdAt:\s*(.*)/);
+            const updatedAtMatch = meta.match(/updatedAt:\s*(.*)/);
+            
+            const body = content.replace(/---[\s\S]*?---\n*/, '');
+            const bodyMatch = body.match(/## 正文\n\n([\s\S]*?)(\n## |$)/);
+            const contentText = bodyMatch ? bodyMatch[1].trim() : '';
+            
+            knowledge.push({
+              id,
+              title: titleMatch ? titleMatch[1] : '',
+              description: descMatch ? descMatch[1] : '',
+              content: contentText,
+              tags: tagsMatch ? JSON.parse(tagsMatch[1]) : [],
+              author: authorMatch ? parseInt(authorMatch[1]) : 1,
+              files: [],
+              createdAt: createdAtMatch ? new Date(createdAtMatch[1]) : new Date(),
+              updatedAt: updatedAtMatch ? new Date(updatedAtMatch[1]) : new Date()
+            });
+            
+            if (id >= knowledgeIdCounter) {
+              knowledgeIdCounter = id + 1;
+            }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.log('No existing knowledge files found');
+  }
+};
+
+loadKnowledgeFromFiles();
 
 const auth = (req, res, next) => {
   try {
@@ -244,6 +323,7 @@ app.post('/api/knowledge', auth, upload.array('files', 10), (req, res) => {
     };
 
     knowledge.push(item);
+    saveKnowledgeToFile(item);
 
     res.status(201).json(item);
   } catch (err) {
@@ -338,6 +418,8 @@ app.put('/api/knowledge/:id', auth, upload.array('files', 10), (req, res) => {
     updatedAt: new Date()
   };
 
+  saveKnowledgeToFile(knowledge[itemIndex]);
+
   const updatedItem = knowledge[itemIndex];
   const author = users.find(u => u.id === updatedItem.author);
   
@@ -363,6 +445,11 @@ app.delete('/api/knowledge/:id', auth, (req, res) => {
 
   knowledge.splice(itemIndex, 1);
   
+  const filePath = path.join(KNOWLEDGE_DIR, `${id}.md`);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+  
   res.json({ message: '知识已删除' });
 });
 
@@ -372,4 +459,5 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Knowledge files saved to: ${KNOWLEDGE_DIR}`);
 });
