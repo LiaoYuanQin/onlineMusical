@@ -1,0 +1,13 @@
+{
+  "name": "knowledge-sharing-website",
+  "version": "1.0.0",
+  "description": "知识分享网站 - 支持用户管理、知识分享、搜索和Git管理",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "cd backend && npm run dev",
+    "init-git": "git init && git add . && git commit -m 'Initial commit'"
+  },
+  "keywords": ["knowledge", "sharing", "cms", "nodejs"],
+  "author": "",
+  "license": "MIT"
+}
