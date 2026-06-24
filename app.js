@@ -3,13 +3,15 @@ const CONFIG = {
     GITHUB_REPO: 'LiaoYuanQin/onlineMusical',
     GITHUB_API_BASE: 'https://api.github.com/repos',
     USERS_FILE: 'data/users.json',
-    KNOWLEDGE_DIR: 'knowledge'
+    KNOWLEDGE_DIR: 'knowledge',
+    ATTACHMENTS_DIR: 'attachments'
 };
 
 // 全局状态
 let currentUser = null;
 let allUsers = [];
 let allKnowledge = [];
+let uploadedFiles = [];
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,7 +35,7 @@ async function fetchGitHubFile(path) {
     }
 }
 
-// 保存文件到GitHub
+// 保存文本文件到GitHub
 async function saveGitHubFile(path, content, message) {
     try {
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
@@ -66,6 +68,64 @@ async function saveGitHubFile(path, content, message) {
     }
 }
 
+// 上传二进制文件到GitHub
+async function uploadBinaryFile(file, path) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const content = e.target.result.split(',')[1];
+                const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
+                let sha = null;
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    sha = data.sha;
+                }
+                
+                const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `token ${getGitHubToken()}`
+                    },
+                    body: JSON.stringify({
+                        message: `Upload attachment: ${file.name}`,
+                        content: content,
+                        sha: sha
+                    })
+                });
+                
+                if (!putResponse.ok) {
+                    const errorData = await putResponse.json();
+                    throw new Error(errorData.message || '上传失败');
+                }
+                
+                const data = await putResponse.json();
+                resolve(data);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// 从GitHub下载文件
+async function downloadFileFromGitHub(path) {
+    try {
+        const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
+        if (!response.ok) throw new Error('文件不存在');
+        const data = await response.json();
+        const content = atob(data.content);
+        return content;
+    } catch (error) {
+        console.error('下载文件失败:', error);
+        return null;
+    }
+}
+
 // 获取GitHub Token
 function getGitHubToken() {
     return localStorage.getItem('github_token') || '';
@@ -82,7 +142,6 @@ async function loadUsers() {
     if (users) {
         allUsers = users;
     } else {
-        // 初始化管理员用户
         allUsers = [{
             id: 1,
             username: 'admin',
@@ -112,7 +171,6 @@ async function loadKnowledge() {
                     const fileData = await fileResponse.json();
                     const content = atob(fileData.content);
                     
-                    // 解析Markdown文件
                     const match = content.match(/---\n([\s\S]*?)\n---/);
                     if (match) {
                         const meta = match[1];
@@ -122,6 +180,7 @@ async function loadKnowledge() {
                         const authorMatch = meta.match(/author:\s*(\d+)/);
                         const createdAtMatch = meta.match(/createdAt:\s*(.*)/);
                         const updatedAtMatch = meta.match(/updatedAt:\s*(.*)/);
+                        const filesMatch = meta.match(/files:\s*(.*)/);
                         
                         const body = content.replace(/---[\s\S]*?---\n*/, '');
                         const bodyMatch = body.match(/## 正文\n\n([\s\S]*?)(\n## |$)/);
@@ -134,7 +193,7 @@ async function loadKnowledge() {
                             content: contentText,
                             tags: tagsMatch ? JSON.parse(tagsMatch[1]) : [],
                             author: authorMatch ? parseInt(authorMatch[1]) : 1,
-                            files: [],
+                            files: filesMatch ? JSON.parse(filesMatch[1]) : [],
                             createdAt: createdAtMatch ? new Date(createdAtMatch[1]) : new Date(),
                             updatedAt: updatedAtMatch ? new Date(updatedAtMatch[1]) : new Date()
                         });
@@ -145,7 +204,6 @@ async function loadKnowledge() {
             }
         }
         
-        // 按创建时间排序
         allKnowledge.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
     } catch (error) {
@@ -189,37 +247,117 @@ function updateAuthUI() {
 
 // 设置事件监听器
 function setupEventListeners() {
-    // 登录表单
     document.getElementById('loginForm').addEventListener('submit', handleLogin);
-    
-    // 注册表单
     document.getElementById('registerForm').addEventListener('submit', handleRegister);
-    
-    // 知识表单
     document.getElementById('knowledgeForm').addEventListener('submit', handleCreateKnowledge);
-    
-    // 搜索输入框回车事件
     document.getElementById('searchInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            searchKnowledge();
-        }
+        if (e.key === 'Enter') searchKnowledge();
     });
+    
+    // 文件上传事件
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    // 拖拽上传
+    const uploadArea = document.getElementById('fileUploadArea');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '#e0e0e0';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#e0e0e0';
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+    }
+}
+
+// 处理文件选择
+function handleFileSelect(e) {
+    const files = Array.from(e.target.files);
+    handleFiles(files);
+}
+
+// 处理文件
+function handleFiles(files) {
+    files.forEach(file => {
+        const fileInfo = {
+            file: file,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            id: Date.now() + Math.random()
+        };
+        uploadedFiles.push(fileInfo);
+    });
+    renderUploadedFiles();
+}
+
+// 渲染已上传文件
+function renderUploadedFiles() {
+    const container = document.getElementById('uploadedFiles');
+    
+    if (uploadedFiles.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = uploadedFiles.map(fileInfo => `
+        <div class="uploaded-file">
+            <div class="file-info">
+                <div class="file-icon">${getFileIcon(fileInfo.type)}</div>
+                <div>
+                    <div class="file-name">${escapeHtml(fileInfo.name)}</div>
+                    <div class="file-size">${formatFileSize(fileInfo.size)}</div>
+                </div>
+            </div>
+            <button class="remove-file" onclick="removeUploadedFile(${fileInfo.id})">✕</button>
+        </div>
+    `).join('');
+}
+
+// 获取文件图标
+function getFileIcon(type) {
+    if (type.startsWith('image/')) return '🖼️';
+    if (type.includes('pdf')) return '📄';
+    if (type.includes('word') || type.includes('document')) return '📝';
+    if (type.includes('excel') || type.includes('spreadsheet')) return '📊';
+    if (type.includes('powerpoint') || type.includes('presentation')) return '📈';
+    if (type.includes('zip') || type.includes('rar')) return '📦';
+    return '📎';
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// 移除已上传文件
+function removeUploadedFile(id) {
+    uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+    renderUploadedFiles();
 }
 
 // 页面切换
 function showPage(pageName) {
-    // 隐藏所有页面
-    document.querySelectorAll('.page').forEach(page => {
-        page.style.display = 'none';
-    });
+    document.querySelectorAll('.page').forEach(page => page.style.display = 'none');
     
-    // 显示目标页面
     const targetPage = document.getElementById(pageName + 'Page');
     if (targetPage) {
         targetPage.style.display = 'block';
     }
     
-    // 根据页面加载相应数据
     switch(pageName) {
         case 'home':
             renderKnowledgeList(allKnowledge);
@@ -237,6 +375,8 @@ function showPage(pageName) {
                 alert('请先登录');
                 showPage('login');
             }
+            uploadedFiles = [];
+            renderUploadedFiles();
             break;
     }
 }
@@ -260,7 +400,6 @@ async function handleLogin(e) {
         return;
     }
     
-    // 检查是否需要GitHub Token
     if (!getGitHubToken()) {
         const token = prompt('请输入GitHub Personal Access Token (用于保存数据):');
         if (token) {
@@ -276,8 +415,6 @@ async function handleLogin(e) {
     
     alert('登录成功');
     showPage('home');
-    
-    // 清空表单
     document.getElementById('loginForm').reset();
 }
 
@@ -289,7 +426,6 @@ async function handleRegister(e) {
     const email = document.getElementById('registerEmail').value;
     const password = document.getElementById('registerPassword').value;
     
-    // 检查邮箱是否已存在
     if (allUsers.find(u => u.email === email)) {
         alert('该邮箱已被注册');
         return;
@@ -310,8 +446,6 @@ async function handleRegister(e) {
     
     alert('注册成功，请等待管理员审核');
     showPage('login');
-    
-    // 清空表单
     document.getElementById('registerForm').reset();
 }
 
@@ -335,6 +469,7 @@ function renderKnowledgeList(knowledgeList) {
     container.innerHTML = knowledgeList.map(item => {
         const author = allUsers.find(u => u.id === item.author);
         const authorName = author ? author.username : '未知作者';
+        const hasAttachments = item.files && item.files.length > 0;
         
         return `
             <div class="knowledge-card" onclick="showKnowledgeDetail(${item.id})">
@@ -343,6 +478,7 @@ function renderKnowledgeList(knowledgeList) {
                 <div class="knowledge-tags">
                     ${item.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
                 </div>
+                ${hasAttachments ? `<div class="knowledge-meta">📎 ${item.files.length} 个附件</div>` : ''}
                 <div class="knowledge-meta">
                     <span>👤 ${escapeHtml(authorName)}</span>
                     <span>📅 ${formatDate(item.createdAt)}</span>
@@ -363,6 +499,7 @@ function showKnowledgeDetail(id) {
     const author = allUsers.find(u => u.id === item.author);
     const authorName = author ? author.username : '未知作者';
     const isOwner = currentUser && (currentUser.role === 'admin' || currentUser.id === item.author);
+    const hasAttachments = item.files && item.files.length > 0;
     
     document.getElementById('knowledgeDetail').innerHTML = `
         <h1 class="detail-title">${escapeHtml(item.title)}</h1>
@@ -371,19 +508,87 @@ function showKnowledgeDetail(id) {
             ${item.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
         </div>
         <div class="detail-content">${escapeHtml(item.content)}</div>
+        
+        ${hasAttachments ? `
+            <div class="detail-attachments">
+                <h3>📎 附件</h3>
+                <div class="attachment-list">
+                    ${item.files.map(file => `
+                        <div class="attachment-item">
+                            <span>${getFileIcon(file.type)}</span>
+                            <a href="${file.downloadUrl}" target="_blank" download="${file.name}">
+                                ${escapeHtml(file.name)}
+                            </a>
+                            <span class="file-size">${formatFileSize(file.size)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
+        
         <div class="detail-meta">
             <p>👤 作者: ${escapeHtml(authorName)}</p>
             <p>📅 创建时间: ${formatDate(item.createdAt)}</p>
             <p>🔄 更新时间: ${formatDate(item.updatedAt)}</p>
         </div>
-        ${isOwner ? `
-            <div class="detail-actions">
+        
+        <div class="detail-actions">
+            <button onclick="exportKnowledge(${item.id})" class="btn btn-export">📥 导出知识</button>
+            ${isOwner ? `
                 <button onclick="deleteKnowledge(${item.id})" class="btn btn-danger">删除</button>
-            </div>
-        ` : ''}
+            ` : ''}
+        </div>
     `;
     
     showPage('detail');
+}
+
+// 导出知识
+function exportKnowledge(id) {
+    const item = allKnowledge.find(k => k.id === id);
+    if (!item) return;
+    
+    const author = allUsers.find(u => u.id === item.author);
+    const authorName = author ? author.username : '未知作者';
+    
+    const mdContent = `---
+title: "${item.title}"
+description: "${item.description}"
+tags: ${JSON.stringify(item.tags)}
+author: ${authorName}
+createdAt: ${item.createdAt}
+updatedAt: ${item.updatedAt}
+---
+
+# ${item.title}
+
+## 描述
+
+${item.description}
+
+## 正文
+
+${item.content}
+
+${item.files && item.files.length > 0 ? `## 附件
+
+${item.files.map(f => `- [${f.name}](${f.downloadUrl})`).join('\n')}` : ''}
+`;
+    
+    downloadFile(mdContent, `${item.title}.md`, 'text/markdown');
+}
+
+// 下载文件
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // 搜索知识
@@ -420,26 +625,35 @@ async function handleCreateKnowledge(e) {
     
     const newId = allKnowledge.length > 0 ? Math.max(...allKnowledge.map(k => k.id)) + 1 : 1;
     
-    const newItem = {
-        id: newId,
-        title,
-        description,
-        content,
-        tags,
-        author: currentUser.id,
-        files: [],
-        createdAt: new Date(),
-        updatedAt: new Date()
-    };
+    // 上传附件
+    const uploadedFileInfo = [];
+    for (const fileInfo of uploadedFiles) {
+        try {
+            const filePath = `${CONFIG.ATTACHMENTS_DIR}/${newId}/${fileInfo.name}`;
+            const result = await uploadBinaryFile(fileInfo.file, filePath);
+            
+            uploadedFileInfo.push({
+                name: fileInfo.name,
+                size: fileInfo.size,
+                type: fileInfo.type,
+                path: filePath,
+                downloadUrl: result.content.download_url
+            });
+        } catch (error) {
+            console.error('上传附件失败:', error);
+            alert(`上传文件 ${fileInfo.name} 失败: ${error.message}`);
+            return;
+        }
+    }
     
-    // 创建Markdown内容
     const mdContent = `---
 title: "${title}"
 description: "${description}"
 tags: ${JSON.stringify(tags)}
 author: ${currentUser.id}
-createdAt: ${newItem.createdAt.toISOString()}
-updatedAt: ${newItem.updatedAt.toISOString()}
+createdAt: ${new Date().toISOString()}
+updatedAt: ${new Date().toISOString()}
+files: ${JSON.stringify(uploadedFileInfo)}
 ---
 
 # ${title}
@@ -451,16 +665,32 @@ ${description}
 ## 正文
 
 ${content}
+
+${uploadedFileInfo.length > 0 ? `## 附件
+
+${uploadedFileInfo.map(f => `- [${f.name}](${f.downloadUrl})`).join('\n')}` : ''}
 `;
     
     try {
         await saveGitHubFile(`${CONFIG.KNOWLEDGE_DIR}/${newId}.md`, mdContent, `创建知识: ${title}`);
         
-        allKnowledge.unshift(newItem);
+        allKnowledge.unshift({
+            id: newId,
+            title,
+            description,
+            content,
+            tags,
+            author: currentUser.id,
+            files: uploadedFileInfo,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        
         alert('知识发布成功');
         
-        // 清空表单
+        uploadedFiles = [];
         document.getElementById('knowledgeForm').reset();
+        renderUploadedFiles();
         showPage('home');
         
     } catch (error) {
@@ -482,11 +712,31 @@ async function deleteKnowledge(id) {
     }
     
     try {
-        // 获取文件SHA
+        // 删除附件文件
+        if (item.files && item.files.length > 0) {
+            for (const file of item.files) {
+                const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${file.path}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${file.path}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `token ${getGitHubToken()}`
+                        },
+                        body: JSON.stringify({
+                            message: `Delete attachment: ${file.name}`,
+                            sha: data.sha
+                        })
+                    });
+                }
+            }
+        }
+        
+        // 删除知识文件
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}/${id}.md`);
         const data = await response.json();
         
-        // 删除文件
         await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}/${id}.md`, {
             method: 'DELETE',
             headers: {
@@ -579,6 +829,7 @@ function renderAllKnowledge() {
     container.innerHTML = allKnowledge.map(item => {
         const author = allUsers.find(u => u.id === item.author);
         const authorName = author ? author.username : '未知作者';
+        const hasAttachments = item.files && item.files.length > 0;
         
         return `
             <div class="knowledge-item">
@@ -586,6 +837,7 @@ function renderAllKnowledge() {
                     <div class="knowledge-title">${escapeHtml(item.title)}</div>
                     <div>作者: ${escapeHtml(authorName)}</div>
                     <div>创建时间: ${formatDate(item.createdAt)}</div>
+                    ${hasAttachments ? `<div>📎 ${item.files.length} 个附件</div>` : ''}
                 </div>
                 <div class="user-actions">
                     <button onclick="showKnowledgeDetail(${item.id})" class="btn btn-outline">查看</button>
@@ -639,20 +891,9 @@ async function adminDeleteKnowledge(id) {
 
 // 显示管理标签页
 function showAdminTab(tabName) {
-    // 隐藏所有标签内容
-    document.querySelectorAll('.admin-tab-content').forEach(tab => {
-        tab.style.display = 'none';
-    });
-    
-    // 移除所有标签的active类
-    document.querySelectorAll('.admin-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    
-    // 显示目标标签内容
+    document.querySelectorAll('.admin-tab-content').forEach(tab => tab.style.display = 'none');
+    document.querySelectorAll('.admin-tab').forEach(tab => tab.classList.remove('active'));
     document.getElementById(tabName + 'Tab').style.display = 'block';
-    
-    // 添加active类到目标标签
     event.target.classList.add('active');
 }
 

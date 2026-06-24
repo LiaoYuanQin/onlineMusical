@@ -348,6 +348,138 @@ body {
     gap: 0.5rem;
 }
 
+/* 文件上传区域 */
+.file-upload-area {
+    border: 2px dashed #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    min-height: 150px;
+    transition: all 0.3s;
+}
+
+.file-upload-area:hover {
+    border-color: #667eea;
+    background: #fafafa;
+}
+
+.upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    cursor: pointer;
+    color: #666;
+}
+
+.upload-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.upload-hint {
+    font-size: 0.85rem;
+    color: #999;
+    margin-top: 0.25rem;
+}
+
+.uploaded-files {
+    margin-top: 1rem;
+}
+
+.uploaded-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: #f5f5f5;
+    border-radius: 5px;
+    margin-bottom: 0.5rem;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.file-icon {
+    font-size: 1.5rem;
+}
+
+.file-name {
+    font-size: 0.95rem;
+    color: #333;
+}
+
+.file-size {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+.remove-file {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    transition: background 0.2s;
+}
+
+.remove-file:hover {
+    background: #ffeaea;
+}
+
+/* 附件展示 */
+.detail-attachments {
+    margin-top: 1.5rem;
+}
+
+.detail-attachments h3 {
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.attachment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.attachment-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f5f5f5;
+    border-radius: 5px;
+}
+
+.attachment-item a {
+    flex: 1;
+    text-decoration: none;
+    color: #667eea;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.attachment-item a:hover {
+    text-decoration: underline;
+}
+
+/* 导出按钮 */
+.btn-export {
+    background: #10b981;
+    color: white;
+}
+
+.btn-export:hover {
+    background: #059669;
+}
+
 /* 加载状态 */
 .loading {
     text-align: center;

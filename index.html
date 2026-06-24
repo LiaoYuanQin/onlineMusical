@@ -74,6 +74,18 @@
                             <label>标签（用逗号分隔）</label>
                             <input type="text" id="tags" class="form-control" placeholder="例如：技术, 教程, 经验">
                         </div>
+                        <div class="form-group">
+                            <label>附件（图片或文档，支持多文件）</label>
+                            <div class="file-upload-area" id="fileUploadArea">
+                                <input type="file" id="fileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" style="display:none">
+                                <div class="upload-placeholder" onclick="document.getElementById('fileInput').click()">
+                                    <div class="upload-icon">📁</div>
+                                    <div>点击或拖拽文件到此处上传</div>
+                                    <div class="upload-hint">支持图片、PDF、文档、压缩包等格式</div>
+                                </div>
+                                <div id="uploadedFiles" class="uploaded-files"></div>
+                            </div>
+                        </div>
                         <button type="submit" class="btn btn-primary">发布知识</button>
                     </form>
                 </div>
