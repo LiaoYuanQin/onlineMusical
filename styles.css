@@ -362,6 +362,11 @@ body {
     background: #fafafa;
 }
 
+.file-upload-area.dragover {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
 .upload-placeholder {
     display: flex;
     flex-direction: column;
@@ -444,30 +449,50 @@ body {
 
 .attachment-list {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .attachment-item {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: #f5f5f5;
-    border-radius: 5px;
-}
-
-.attachment-item a {
-    flex: 1;
-    text-decoration: none;
-    color: #667eea;
-    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 0.5rem;
+    padding: 1rem;
+    background: #f5f5f5;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    max-width: 200px;
+    text-align: center;
 }
 
-.attachment-item a:hover {
-    text-decoration: underline;
+.attachment-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.attachment-image {
+    max-width: 150px;
+    max-height: 150px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.attachment-doc-icon {
+    font-size: 3rem;
+}
+
+.attachment-name {
+    font-size: 0.85rem;
+    color: #333;
+    word-break: break-word;
+    max-width: 150px;
+}
+
+.attachment-size {
+    font-size: 0.75rem;
+    color: #999;
 }
 
 /* 导出按钮 */
@@ -478,6 +503,129 @@ body {
 
 .btn-export:hover {
     background: #059669;
+}
+
+/* 全屏查看器模态框 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+    position: relative;
+    background: #1a1a1a;
+    border-radius: 10px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+.modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.3s;
+}
+
+.modal-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.modal-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    max-height: 80vh;
+}
+
+.modal-body img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.modal-body iframe {
+    width: 100%;
+    height: 80vh;
+    border: none;
+}
+
+.modal-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: white;
+}
+
+.preview-icon {
+    font-size: 4rem;
+}
+
+.preview-text {
+    font-size: 1.2rem;
+    color: #ccc;
+}
+
+.modal-nav {
+    position: absolute;
+    bottom: 1rem;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+}
+
+.modal-nav-btn {
+    padding: 0.75rem 1.5rem;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.modal-nav-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.modal-counter {
+    color: white;
+    font-size: 1rem;
+    min-width: 80px;
+    text-align: center;
 }
 
 /* 加载状态 */
@@ -525,5 +673,25 @@ body {
     .user-actions {
         width: 100%;
         justify-content: flex-start;
+    }
+    
+    .attachment-list {
+        flex-direction: column;
+    }
+    
+    .attachment-item {
+        max-width: 100%;
+        flex-direction: row;
+        text-align: left;
+    }
+    
+    .attachment-image {
+        max-width: 80px;
+        max-height: 80px;
+    }
+    
+    .modal-content {
+        max-width: 95vw;
+        max-height: 95vh;
     }
 }

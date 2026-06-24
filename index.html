@@ -173,6 +173,28 @@
                 </div>
             </div>
         </main>
+
+        <!-- 全屏查看器模态框 -->
+        <div id="fullscreenModal" class="modal" style="display:none">
+            <div class="modal-overlay" onclick="closeFullscreen()"></div>
+            <div class="modal-content">
+                <button class="modal-close" onclick="closeFullscreen()">✕</button>
+                <div class="modal-body">
+                    <img id="modalImage" src="" alt="全屏图片" style="display:none">
+                    <iframe id="modalIframe" src="" style="display:none"></iframe>
+                    <div id="modalPreview" style="display:none">
+                        <div class="preview-icon">📄</div>
+                        <div class="preview-text">点击下载查看完整文档</div>
+                        <a id="modalDownloadLink" href="" download class="btn btn-primary">下载文档</a>
+                    </div>
+                </div>
+                <div class="modal-nav">
+                    <button class="modal-nav-btn" id="prevBtn" onclick="navigateAttachment(-1)" style="display:none">← 上一个</button>
+                    <span id="modalCounter" class="modal-counter"></span>
+                    <button class="modal-nav-btn" id="nextBtn" onclick="navigateAttachment(1)" style="display:none">下一个 →</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

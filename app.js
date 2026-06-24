@@ -12,6 +12,8 @@ let currentUser = null;
 let allUsers = [];
 let allKnowledge = [];
 let uploadedFiles = [];
+let currentAttachments = [];
+let currentAttachmentIndex = 0;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -265,20 +267,39 @@ function setupEventListeners() {
     if (uploadArea) {
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadArea.style.borderColor = '#667eea';
+            uploadArea.classList.add('dragover');
         });
         
         uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = '#e0e0e0';
+            uploadArea.classList.remove('dragover');
         });
         
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            uploadArea.style.borderColor = '#e0e0e0';
+            uploadArea.classList.remove('dragover');
             const files = Array.from(e.dataTransfer.files);
             handleFiles(files);
         });
     }
+    
+    // ESC键关闭全屏
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFullscreen();
+        }
+    });
+    
+    // 键盘导航
+    document.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('fullscreenModal');
+        if (modal.style.display === 'flex') {
+            if (e.key === 'ArrowLeft') {
+                navigateAttachment(-1);
+            } else if (e.key === 'ArrowRight') {
+                navigateAttachment(1);
+            }
+        }
+    });
 }
 
 // 处理文件选择
@@ -334,6 +355,16 @@ function getFileIcon(type) {
     if (type.includes('powerpoint') || type.includes('presentation')) return '📈';
     if (type.includes('zip') || type.includes('rar')) return '📦';
     return '📎';
+}
+
+// 判断是否为图片类型
+function isImageType(type) {
+    return type.startsWith('image/');
+}
+
+// 判断是否为PDF类型
+function isPdfType(type) {
+    return type.includes('pdf') || type === 'application/pdf';
 }
 
 // 格式化文件大小
@@ -501,6 +532,32 @@ function showKnowledgeDetail(id) {
     const isOwner = currentUser && (currentUser.role === 'admin' || currentUser.id === item.author);
     const hasAttachments = item.files && item.files.length > 0;
     
+    // 生成附件HTML
+    let attachmentsHtml = '';
+    if (hasAttachments) {
+        attachmentsHtml = `
+            <div class="detail-attachments">
+                <h3>📎 附件（点击图片可全屏查看）</h3>
+                <div class="attachment-list">
+                    ${item.files.map((file, index) => {
+                        const isImg = isImageType(file.type);
+                        return `
+                            <div class="attachment-item" onclick="openFullscreen([${item.files.map(f => JSON.stringify(f)).join(',')}], ${index})">
+                                ${isImg ? `
+                                    <img src="${file.downloadUrl}" class="attachment-image" alt="${escapeHtml(file.name)}" />
+                                ` : `
+                                    <div class="attachment-doc-icon">${getFileIcon(file.type)}</div>
+                                `}
+                                <div class="attachment-name">${escapeHtml(file.name)}</div>
+                                <div class="attachment-size">${formatFileSize(file.size)}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
     document.getElementById('knowledgeDetail').innerHTML = `
         <h1 class="detail-title">${escapeHtml(item.title)}</h1>
         <div class="detail-description">${escapeHtml(item.description)}</div>
@@ -509,22 +566,7 @@ function showKnowledgeDetail(id) {
         </div>
         <div class="detail-content">${escapeHtml(item.content)}</div>
         
-        ${hasAttachments ? `
-            <div class="detail-attachments">
-                <h3>📎 附件</h3>
-                <div class="attachment-list">
-                    ${item.files.map(file => `
-                        <div class="attachment-item">
-                            <span>${getFileIcon(file.type)}</span>
-                            <a href="${file.downloadUrl}" target="_blank" download="${file.name}">
-                                ${escapeHtml(file.name)}
-                            </a>
-                            <span class="file-size">${formatFileSize(file.size)}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        ` : ''}
+        ${attachmentsHtml}
         
         <div class="detail-meta">
             <p>👤 作者: ${escapeHtml(authorName)}</p>
@@ -541,6 +583,65 @@ function showKnowledgeDetail(id) {
     `;
     
     showPage('detail');
+}
+
+// 打开全屏查看器
+function openFullscreen(attachments, index) {
+    currentAttachments = attachments;
+    currentAttachmentIndex = index;
+    
+    const modal = document.getElementById('fullscreenModal');
+    const modalImage = document.getElementById('modalImage');
+    const modalIframe = document.getElementById('modalIframe');
+    const modalPreview = document.getElementById('modalPreview');
+    const modalDownloadLink = document.getElementById('modalDownloadLink');
+    const modalCounter = document.getElementById('modalCounter');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    
+    // 隐藏所有内容
+    modalImage.style.display = 'none';
+    modalIframe.style.display = 'none';
+    modalPreview.style.display = 'none';
+    
+    const currentFile = currentAttachments[currentAttachmentIndex];
+    
+    if (isImageType(currentFile.type)) {
+        modalImage.src = currentFile.downloadUrl;
+        modalImage.style.display = 'block';
+    } else if (isPdfType(currentFile.type)) {
+        modalIframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(currentFile.downloadUrl)}&embedded=true`;
+        modalIframe.style.display = 'block';
+    } else {
+        modalDownloadLink.href = currentFile.downloadUrl;
+        modalDownloadLink.download = currentFile.name;
+        modalPreview.style.display = 'flex';
+    }
+    
+    // 更新计数器
+    modalCounter.textContent = `${currentAttachmentIndex + 1} / ${currentAttachments.length}`;
+    
+    // 更新导航按钮
+    prevBtn.style.display = currentAttachmentIndex > 0 ? 'block' : 'none';
+    nextBtn.style.display = currentAttachmentIndex < currentAttachments.length - 1 ? 'block' : 'none';
+    
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+// 关闭全屏查看器
+function closeFullscreen() {
+    const modal = document.getElementById('fullscreenModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+// 导航附件
+function navigateAttachment(direction) {
+    const newIndex = currentAttachmentIndex + direction;
+    if (newIndex >= 0 && newIndex < currentAttachments.length) {
+        openFullscreen(currentAttachments, newIndex);
+    }
 }
 
 // 导出知识
