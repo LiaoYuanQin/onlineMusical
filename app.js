@@ -61,6 +61,7 @@ async function saveGitHubFile(path, content, message) {
 
         console.log('正在保存文件:', path);
         console.log('Token 前缀:', token.substring(0, 10) + '...');
+        console.log('内容类型:', typeof content);
 
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
             headers: {
@@ -81,9 +82,18 @@ async function saveGitHubFile(path, content, message) {
             throw new Error(`获取文件信息失败: ${response.status} - ${errorText}`);
         }
 
-        // 使用支持 Unicode 的编码方法
-        const contentJson = JSON.stringify(content, null, 2);
-        const base64Content = utf8ToBase64(contentJson);
+        // 根据内容类型决定编码方式
+        let base64Content;
+        if (typeof content === 'string') {
+            // 如果是字符串（如 Markdown），直接编码
+            base64Content = utf8ToBase64(content);
+            console.log('直接编码字符串，长度:', content.length);
+        } else {
+            // 如果是对象，先 JSON.stringify 再编码
+            const contentJson = JSON.stringify(content, null, 2);
+            base64Content = utf8ToBase64(contentJson);
+            console.log('JSON.stringify 后编码，长度:', contentJson.length);
+        }
 
         const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
             method: 'PUT',
@@ -348,10 +358,15 @@ async function loadKnowledge() {
                     // 使用支持 Unicode 的解码方法
                     const content = base64ToUtf8(fileData.content);
                     console.log('文件内容长度:', content.length);
+                    console.log('文件内容前200字符:', content.substring(0, 200));
                     
-                    const match = content.match(/---\n([\s\S]*?)\n---/);
+                    // 尝试匹配 YAML front matter
+                    const match = content.match(/^---\n([\s\S]*?)\n---/);
                     if (match) {
+                        console.log('找到 YAML front matter');
                         const meta = match[1];
+                        console.log('元数据内容:', meta);
+                        
                         const titleMatch = meta.match(/title:\s*"(.*?)"/);
                         const descMatch = meta.match(/description:\s*"(.*?)"/);
                         const tagsMatch = meta.match(/tags:\s*(.*)/);
@@ -360,7 +375,15 @@ async function loadKnowledge() {
                         const updatedAtMatch = meta.match(/updatedAt:\s*(.*)/);
                         const filesMatch = meta.match(/files:\s*(.*)/);
                         
-                        const body = content.replace(/---[\s\S]*?---\n*/, '');
+                        console.log('解析结果:', {
+                            title: titleMatch ? titleMatch[1] : '未找到',
+                            description: descMatch ? descMatch[1] : '未找到',
+                            tags: tagsMatch ? tagsMatch[1] : '未找到',
+                            author: authorMatch ? authorMatch[1] : '未找到',
+                            files: filesMatch ? filesMatch[1] : '未找到'
+                        });
+                        
+                        const body = content.replace(/^---[\s\S]*?---\n*/, '');
                         const bodyMatch = body.match(/## 正文\n\n([\s\S]*?)(\n## |$)/);
                         const contentText = bodyMatch ? bodyMatch[1].trim() : '';
                         
@@ -380,6 +403,7 @@ async function loadKnowledge() {
                         allKnowledge.push(knowledgeItem);
                     } else {
                         console.warn('文件格式不正确，无法解析元数据:', file.name);
+                        console.log('文件内容:', content);
                     }
                 } catch (error) {
                     console.error('解析知识文件失败:', file.name, error);
