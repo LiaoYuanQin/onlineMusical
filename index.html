@@ -188,6 +188,12 @@
                         <a id="modalDownloadLink" href="" download class="btn btn-primary">下载文档</a>
                     </div>
                 </div>
+                <div class="modal-controls">
+                    <button class="modal-zoom-btn" id="zoomOutBtn" onclick="zoomImage(-0.25)" style="display:none">− 缩小</button>
+                    <span id="zoomLevel" class="zoom-level" style="display:none">100%</span>
+                    <button class="modal-zoom-btn" id="zoomInBtn" onclick="zoomImage(0.25)" style="display:none">+ 放大</button>
+                    <button class="modal-zoom-btn" id="zoomResetBtn" onclick="resetZoom()" style="display:none">⟲ 重置</button>
+                </div>
                 <div class="modal-nav">
                     <button class="modal-nav-btn" id="prevBtn" onclick="navigateAttachment(-1)" style="display:none">← 上一个</button>
                     <span id="modalCounter" class="modal-counter"></span>
@@ -197,6 +203,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=2026062402"></script>
+    <script src="app.js?v=2026062403"></script>
 </body>
 </html>

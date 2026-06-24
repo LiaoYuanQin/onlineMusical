@@ -14,6 +14,7 @@ let allKnowledge = [];
 let uploadedFiles = [];
 let currentAttachments = [];
 let currentAttachmentIndex = 0;
+let currentZoom = 1;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -840,6 +841,7 @@ function showKnowledgeDetail(id) {
 function openFullscreen(attachments, index) {
     currentAttachments = attachments;
     currentAttachmentIndex = index;
+    currentZoom = 1; // 重置缩放比例
     
     const modal = document.getElementById('fullscreenModal');
     const modalImage = document.getElementById('modalImage');
@@ -849,17 +851,36 @@ function openFullscreen(attachments, index) {
     const modalCounter = document.getElementById('modalCounter');
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
+    const zoomLevel = document.getElementById('zoomLevel');
     
     // 隐藏所有内容
     modalImage.style.display = 'none';
     modalIframe.style.display = 'none';
     modalPreview.style.display = 'none';
     
+    // 隐藏缩放控制
+    zoomInBtn.style.display = 'none';
+    zoomOutBtn.style.display = 'none';
+    zoomResetBtn.style.display = 'none';
+    zoomLevel.style.display = 'none';
+    
     const currentFile = currentAttachments[currentAttachmentIndex];
     
     if (isImageType(currentFile.type)) {
         modalImage.src = currentFile.downloadUrl;
         modalImage.style.display = 'block';
+        modalImage.style.transform = 'scale(1)';
+        modalImage.style.cursor = 'zoom-in';
+        
+        // 显示缩放控制
+        zoomInBtn.style.display = 'inline-block';
+        zoomOutBtn.style.display = 'inline-block';
+        zoomResetBtn.style.display = 'inline-block';
+        zoomLevel.style.display = 'inline-block';
+        zoomLevel.textContent = '100%';
     } else if (isPdfType(currentFile.type)) {
         modalIframe.src = `https://docs.google.com/gview?url=${encodeURIComponent(currentFile.downloadUrl)}&embedded=true`;
         modalIframe.style.display = 'block';
@@ -885,6 +906,7 @@ function closeFullscreen() {
     const modal = document.getElementById('fullscreenModal');
     modal.style.display = 'none';
     document.body.style.overflow = 'auto';
+    currentZoom = 1; // 重置缩放比例
 }
 
 // 导航附件
@@ -893,6 +915,30 @@ function navigateAttachment(direction) {
     if (newIndex >= 0 && newIndex < currentAttachments.length) {
         openFullscreen(currentAttachments, newIndex);
     }
+}
+
+// 图片缩放
+function zoomImage(delta) {
+    const modalImage = document.getElementById('modalImage');
+    const zoomLevel = document.getElementById('zoomLevel');
+    
+    currentZoom = Math.max(0.25, Math.min(3, currentZoom + delta));
+    modalImage.style.transform = `scale(${currentZoom})`;
+    zoomLevel.textContent = `${Math.round(currentZoom * 100)}%`;
+    
+    // 更新鼠标样式
+    modalImage.style.cursor = currentZoom > 1 ? 'zoom-out' : 'zoom-in';
+}
+
+// 重置缩放
+function resetZoom() {
+    const modalImage = document.getElementById('modalImage');
+    const zoomLevel = document.getElementById('zoomLevel');
+    
+    currentZoom = 1;
+    modalImage.style.transform = 'scale(1)';
+    zoomLevel.textContent = '100%';
+    modalImage.style.cursor = 'zoom-in';
 }
 
 // 导出知识
