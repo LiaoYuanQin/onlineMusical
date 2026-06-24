@@ -59,9 +59,15 @@ async function saveGitHubFile(path, content, message) {
             throw new Error('GitHub Token 未配置');
         }
 
-        console.log('正在保存文件:', path);
-        console.log('Token 前缀:', token.substring(0, 10) + '...');
+        console.log('=== saveGitHubFile ===');
+        console.log('文件路径:', path);
         console.log('内容类型:', typeof content);
+        console.log('内容长度:', typeof content === 'string' ? content.length : '对象');
+        
+        // 额外检查：如果是字符串，显示前50个字符
+        if (typeof content === 'string') {
+            console.log('内容预览(前50字符):', content.substring(0, 50));
+        }
 
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
             headers: {
@@ -87,12 +93,12 @@ async function saveGitHubFile(path, content, message) {
         if (typeof content === 'string') {
             // 如果是字符串（如 Markdown），直接编码
             base64Content = utf8ToBase64(content);
-            console.log('直接编码字符串，长度:', content.length);
+            console.log('直接编码字符串，Base64长度:', base64Content.length);
         } else {
             // 如果是对象，先 JSON.stringify 再编码
             const contentJson = JSON.stringify(content, null, 2);
             base64Content = utf8ToBase64(contentJson);
-            console.log('JSON.stringify 后编码，长度:', contentJson.length);
+            console.log('JSON.stringify 后编码，Base64长度:', base64Content.length);
         }
 
         const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
@@ -116,6 +122,7 @@ async function saveGitHubFile(path, content, message) {
 
         const result = await putResponse.json();
         console.log('文件保存成功:', result);
+        console.log('=== saveGitHubFile 结束 ===');
         return result;
     } catch (error) {
         console.error('保存文件失败:', error);
