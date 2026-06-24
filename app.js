@@ -323,18 +323,31 @@ async function loadUsers() {
 // 加载知识数据
 async function loadKnowledge() {
     try {
+        console.log('=== 开始从 GitHub 加载知识数据 ===');
+        console.log('知识目录:', CONFIG.KNOWLEDGE_DIR);
+        
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}`);
-        if (!response.ok) throw new Error('知识目录不存在');
+        if (!response.ok) {
+            console.error('知识目录不存在，响应状态:', response.status);
+            throw new Error('知识目录不存在');
+        }
         
         const files = await response.json();
+        console.log('找到文件数量:', files.length);
+        console.log('文件列表:', files.map(f => f.name));
+        
         allKnowledge = [];
         
         for (const file of files) {
             if (file.name.endsWith('.md')) {
                 try {
+                    console.log('正在解析文件:', file.name);
                     const fileResponse = await fetch(file.url);
                     const fileData = await fileResponse.json();
-                    const content = atob(fileData.content);
+                    
+                    // 使用支持 Unicode 的解码方法
+                    const content = base64ToUtf8(fileData.content);
+                    console.log('文件内容长度:', content.length);
                     
                     const match = content.match(/---\n([\s\S]*?)\n---/);
                     if (match) {
@@ -351,7 +364,7 @@ async function loadKnowledge() {
                         const bodyMatch = body.match(/## 正文\n\n([\s\S]*?)(\n## |$)/);
                         const contentText = bodyMatch ? bodyMatch[1].trim() : '';
                         
-                        allKnowledge.push({
+                        const knowledgeItem = {
                             id: parseInt(file.name.replace('.md', '')),
                             title: titleMatch ? titleMatch[1] : '',
                             description: descMatch ? descMatch[1] : '',
@@ -361,7 +374,12 @@ async function loadKnowledge() {
                             files: filesMatch ? JSON.parse(filesMatch[1]) : [],
                             createdAt: createdAtMatch ? new Date(createdAtMatch[1]) : new Date(),
                             updatedAt: updatedAtMatch ? new Date(updatedAtMatch[1]) : new Date()
-                        });
+                        };
+                        
+                        console.log('解析成功:', knowledgeItem.title, '作者ID:', knowledgeItem.author);
+                        allKnowledge.push(knowledgeItem);
+                    } else {
+                        console.warn('文件格式不正确，无法解析元数据:', file.name);
                     }
                 } catch (error) {
                     console.error('解析知识文件失败:', file.name, error);
@@ -370,9 +388,13 @@ async function loadKnowledge() {
         }
         
         allKnowledge.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        console.log('=== 知识数据加载完成 ===');
+        console.log('总共加载知识数量:', allKnowledge.length);
+        console.log('知识列表:', allKnowledge.map(k => ({ id: k.id, title: k.title, author: k.author })));
         
     } catch (error) {
         console.error('加载知识失败:', error);
+        console.log('将使用空的知识列表');
         allKnowledge = [];
     }
 }
@@ -915,19 +937,35 @@ async function handleCreateKnowledge(e) {
         return;
     }
     
+    console.log('=== 开始发布知识 ===');
+    
     const title = document.getElementById('title').value;
     const description = document.getElementById('description').value;
     const content = document.getElementById('content').value;
     const tags = document.getElementById('tags').value.split(',').map(t => t.trim()).filter(t => t);
     
+    console.log('知识标题:', title);
+    console.log('知识描述:', description);
+    console.log('知识内容长度:', content.length);
+    console.log('标签:', tags);
+    console.log('当前用户ID:', currentUser.id);
+    
     const newId = allKnowledge.length > 0 ? Math.max(...allKnowledge.map(k => k.id)) + 1 : 1;
+    console.log('新知识ID:', newId);
     
     // 上传附件
     const uploadedFileInfo = [];
-    for (const fileInfo of uploadedFiles) {
+    console.log('开始上传附件，数量:', uploadedFiles.length);
+    
+    for (let i = 0; i < uploadedFiles.length; i++) {
+        const fileInfo = uploadedFiles[i];
         try {
+            console.log(`正在上传第 ${i + 1}/${uploadedFiles.length} 个文件:`, fileInfo.name);
             const filePath = `${CONFIG.ATTACHMENTS_DIR}/${newId}/${fileInfo.name}`;
+            console.log('文件路径:', filePath);
+            
             const result = await uploadBinaryFile(fileInfo.file, filePath);
+            console.log('文件上传成功:', result);
             
             uploadedFileInfo.push({
                 name: fileInfo.name,
@@ -936,12 +974,15 @@ async function handleCreateKnowledge(e) {
                 path: filePath,
                 downloadUrl: result.content.download_url
             });
+            console.log('附件信息已添加:', uploadedFileInfo[i]);
         } catch (error) {
             console.error('上传附件失败:', error);
             alert(`上传文件 ${fileInfo.name} 失败: ${error.message}`);
             return;
         }
     }
+    
+    console.log('所有附件上传完成');
     
     const mdContent = `---
 title: "${title}"
@@ -968,31 +1009,48 @@ ${uploadedFileInfo.length > 0 ? `## 附件
 ${uploadedFileInfo.map(f => `- [${f.name}](${f.downloadUrl})`).join('\n')}` : ''}
 `;
     
+    console.log('Markdown 内容长度:', mdContent.length);
+    console.log('准备保存到 GitHub...');
+    
     try {
-        await saveGitHubFile(`${CONFIG.KNOWLEDGE_DIR}/${newId}.md`, mdContent, `创建知识: ${title}`);
+        const fileName = `${CONFIG.KNOWLEDGE_DIR}/${newId}.md`;
+        console.log('保存文件名:', fileName);
         
-        allKnowledge.unshift({
-            id: newId,
-            title,
-            description,
-            content,
-            tags,
-            author: currentUser.id,
-            files: uploadedFileInfo,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
+        const saveResult = await saveGitHubFile(fileName, mdContent, `创建知识: ${title}`);
+        console.log('文件保存结果:', saveResult);
         
-        alert('知识发布成功');
-        
-        uploadedFiles = [];
-        document.getElementById('knowledgeForm').reset();
-        renderUploadedFiles();
-        showPage('home');
+        if (saveResult) {
+            console.log('GitHub 保存成功，文件 URL:', saveResult.content.download_url);
+            
+            allKnowledge.unshift({
+                id: newId,
+                title,
+                description,
+                content,
+                tags,
+                author: currentUser.id,
+                files: uploadedFileInfo,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            
+            console.log('本地知识列表已更新，当前总数:', allKnowledge.length);
+            console.log('=== 知识发布完成 ===');
+            
+            alert('知识发布成功');
+            
+            uploadedFiles = [];
+            document.getElementById('knowledgeForm').reset();
+            renderUploadedFiles();
+            showPage('home');
+        } else {
+            console.error('GitHub 保存失败，返回结果为空');
+            alert('发布失败，请检查网络连接');
+        }
         
     } catch (error) {
         console.error('发布知识失败:', error);
-        alert('发布失败，请检查网络连接');
+        alert('发布失败: ' + error.message);
     }
 }
 
