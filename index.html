@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识分享网站</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <h1 class="logo">📚 知识分享平台</h1>
+                <div class="nav-menu">
+                    <a href="#" onclick="showPage('home')" class="nav-link">首页</a>
+                    <a href="#" onclick="showPage('search')" class="nav-link">搜索</a>
+                    <a href="#" onclick="showPage('create')" class="nav-link" id="createLink">发布知识</a>
+                    <a href="#" onclick="showPage('admin')" class="nav-link" id="adminLink" style="display:none">管理</a>
+                    <div id="authButtons">
+                        <button onclick="showPage('login')" class="btn btn-outline">登录</button>
+                        <button onclick="showPage('register')" class="btn btn-primary">注册</button>
+                    </div>
+                    <div id="userInfo" style="display:none">
+                        <span id="userName" class="user-name"></span>
+                        <button onclick="logout()" class="btn btn-outline">退出</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 首页 -->
+            <div id="homePage" class="page">
+                <div class="container">
+                    <h2>📖 最新知识</h2>
+                    <div id="knowledgeList" class="knowledge-grid">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 搜索页面 -->
+            <div id="searchPage" class="page" style="display:none">
+                <div class="container">
+                    <h2>🔍 搜索知识</h2>
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="输入关键词搜索..." class="search-input">
+                        <button onclick="searchKnowledge()" class="btn btn-primary">搜索</button>
+                    </div>
+                    <div id="searchResults" class="knowledge-grid"></div>
+                </div>
+            </div>
+
+            <!-- 创建知识页面 -->
+            <div id="createPage" class="page" style="display:none">
+                <div class="container">
+                    <h2>✍️ 发布知识</h2>
+                    <form id="knowledgeForm" class="form">
+                        <div class="form-group">
+                            <label>标题 *</label>
+                            <input type="text" id="title" required class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>描述 *</label>
+                            <textarea id="description" required class="form-control" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>正文内容 *</label>
+                            <textarea id="content" required class="form-control" rows="10"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>标签（用逗号分隔）</label>
+                            <input type="text" id="tags" class="form-control" placeholder="例如：技术, 教程, 经验">
+                        </div>
+                        <button type="submit" class="btn btn-primary">发布知识</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 登录页面 -->
+            <div id="loginPage" class="page" style="display:none">
+                <div class="container">
+                    <div class="auth-box">
+                        <h2>🔐 登录</h2>
+                        <form id="loginForm" class="form">
+                            <div class="form-group">
+                                <label>邮箱 *</label>
+                                <input type="email" id="loginEmail" required class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>密码 *</label>
+                                <input type="password" id="loginPassword" required class="form-control">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">登录</button>
+                        </form>
+                        <p class="auth-footer">
+                            还没有账号？<a href="#" onclick="showPage('register')">立即注册</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 注册页面 -->
+            <div id="registerPage" class="page" style="display:none">
+                <div class="container">
+                    <div class="auth-box">
+                        <h2>📝 注册</h2>
+                        <form id="registerForm" class="form">
+                            <div class="form-group">
+                                <label>用户名 *</label>
+                                <input type="text" id="registerUsername" required class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>邮箱 *</label>
+                                <input type="email" id="registerEmail" required class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>密码 *</label>
+                                <input type="password" id="registerPassword" required class="form-control">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">注册</button>
+                        </form>
+                        <p class="auth-footer">
+                            已有账号？<a href="#" onclick="showPage('login')">立即登录</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 管理页面 -->
+            <div id="adminPage" class="page" style="display:none">
+                <div class="container">
+                    <h2>⚙️ 管理面板</h2>
+                    <div class="admin-tabs">
+                        <button onclick="showAdminTab('users')" class="admin-tab active">用户管理</button>
+                        <button onclick="showAdminTab('knowledge')" class="admin-tab">知识管理</button>
+                    </div>
+                    
+                    <div id="usersTab" class="admin-tab-content">
+                        <h3>待审核用户</h3>
+                        <div id="pendingUsers" class="user-list"></div>
+                        
+                        <h3>已批准用户</h3>
+                        <div id="approvedUsers" class="user-list"></div>
+                    </div>
+                    
+                    <div id="knowledgeTab" class="admin-tab-content" style="display:none">
+                        <h3>所有知识</h3>
+                        <div id="allKnowledge" class="knowledge-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识详情页面 -->
+            <div id="detailPage" class="page" style="display:none">
+                <div class="container">
+                    <button onclick="showPage('home')" class="btn btn-outline">← 返回</button>
+                    <div id="knowledgeDetail" class="knowledge-detail"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
