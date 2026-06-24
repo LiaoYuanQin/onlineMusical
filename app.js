@@ -694,6 +694,10 @@ async function handleLogin(e) {
     localStorage.setItem('currentUser', JSON.stringify(user));
     updateAuthUI();
 
+    // 登录成功后从 GitHub 加载知识数据
+    console.log('=== 登录成功，开始从 GitHub 加载知识数据 ===');
+    await loadKnowledge();
+
     alert('登录成功');
     showPage('home');
     document.getElementById('loginForm').reset();
