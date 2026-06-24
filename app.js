@@ -40,19 +40,38 @@ async function fetchGitHubFile(path) {
 // 保存文本文件到GitHub
 async function saveGitHubFile(path, content, message) {
     try {
-        const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
+        const token = getGitHubToken();
+        if (!token) {
+            throw new Error('GitHub Token 未配置');
+        }
+
+        console.log('正在保存文件:', path);
+        console.log('Token 前缀:', token.substring(0, 10) + '...');
+
+        const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
+            headers: {
+                'Authorization': `token ${token}`
+            }
+        });
+
         let sha = null;
-        
         if (response.ok) {
             const data = await response.json();
             sha = data.sha;
+            console.log('文件已存在，SHA:', sha);
+        } else if (response.status === 404) {
+            console.log('文件不存在，将创建新文件');
+        } else {
+            const errorText = await response.text();
+            console.error('获取文件信息失败:', response.status, errorText);
+            throw new Error(`获取文件信息失败: ${response.status} - ${errorText}`);
         }
-        
+
         const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `token ${getGitHubToken()}`
+                'Authorization': `token ${token}`
             },
             body: JSON.stringify({
                 message: message,
@@ -60,12 +79,19 @@ async function saveGitHubFile(path, content, message) {
                 sha: sha
             })
         });
-        
-        if (!putResponse.ok) throw new Error('保存失败');
-        return await putResponse.json();
+
+        if (!putResponse.ok) {
+            const errorData = await putResponse.json();
+            console.error('保存文件失败:', errorData);
+            throw new Error(`保存失败: ${errorData.message || putResponse.statusText}`);
+        }
+
+        const result = await putResponse.json();
+        console.log('文件保存成功:', result);
+        return result;
     } catch (error) {
         console.error('保存文件失败:', error);
-        alert('保存失败，请检查GitHub Token配置');
+        alert(`保存失败: ${error.message}\n\n请检查：\n1. GitHub Token 是否有 Contents: Read and Write 权限\n2. Token 是否已过期\n3. 网络连接是否正常`);
         return null;
     }
 }
@@ -76,20 +102,42 @@ async function uploadBinaryFile(file, path) {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
+                const token = getGitHubToken();
+                if (!token) {
+                    throw new Error('GitHub Token 未配置');
+                }
+
+                console.log('正在上传文件:', file.name, '到路径:', path);
+                console.log('文件大小:', file.size, 'bytes');
+
                 const content = e.target.result.split(',')[1];
-                const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
+
+                // 获取文件信息
+                const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
+                    headers: {
+                        'Authorization': `token ${token}`
+                    }
+                });
+
                 let sha = null;
-                
                 if (response.ok) {
                     const data = await response.json();
                     sha = data.sha;
+                    console.log('文件已存在，SHA:', sha);
+                } else if (response.status === 404) {
+                    console.log('文件不存在，将创建新文件');
+                } else {
+                    const errorText = await response.text();
+                    console.error('获取文件信息失败:', response.status, errorText);
+                    throw new Error(`获取文件信息失败: ${response.status} - ${errorText}`);
                 }
-                
+
+                // 上传文件
                 const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `token ${getGitHubToken()}`
+                        'Authorization': `token ${token}`
                     },
                     body: JSON.stringify({
                         message: `Upload attachment: ${file.name}`,
@@ -97,19 +145,25 @@ async function uploadBinaryFile(file, path) {
                         sha: sha
                     })
                 });
-                
+
                 if (!putResponse.ok) {
                     const errorData = await putResponse.json();
-                    throw new Error(errorData.message || '上传失败');
+                    console.error('上传文件失败:', errorData);
+                    throw new Error(`上传失败: ${errorData.message || putResponse.statusText}`);
                 }
-                
+
                 const data = await putResponse.json();
+                console.log('文件上传成功:', data);
                 resolve(data);
             } catch (error) {
+                console.error('上传文件失败:', error);
                 reject(error);
             }
         };
-        reader.onerror = reject;
+        reader.onerror = (error) => {
+            console.error('读取文件失败:', error);
+            reject(new Error('读取文件失败'));
+        };
         reader.readAsDataURL(file);
     });
 }
@@ -136,6 +190,82 @@ function getGitHubToken() {
 // 设置GitHub Token
 function setGitHubToken(token) {
     localStorage.setItem('github_token', token);
+}
+
+// 验证GitHub Token权限
+async function validateGitHubToken(token) {
+    try {
+        console.log('正在验证 GitHub Token...');
+        const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}`, {
+            headers: {
+                'Authorization': `token ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Token 验证失败:', errorData);
+            return {
+                valid: false,
+                error: errorData.message || 'Token 无效'
+            };
+        }
+
+        const repoData = await response.json();
+        console.log('Token 验证成功，仓库信息:', repoData);
+
+        // 测试写入权限
+        const testPath = `test_${Date.now()}.txt`;
+        const testResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${testPath}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `token ${token}`
+            },
+            body: JSON.stringify({
+                message: 'Test write permission',
+                content: btoa('Token test')
+            })
+        });
+
+        if (!testResponse.ok) {
+            const errorData = await testResponse.json();
+            console.error('写入权限测试失败:', errorData);
+            return {
+                valid: true,
+                hasWritePermission: false,
+                error: errorData.message || '没有写入权限'
+            };
+        }
+
+        // 删除测试文件
+        const testData = await testResponse.json();
+        await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${testPath}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `token ${token}`
+            },
+            body: JSON.stringify({
+                message: 'Delete test file',
+                sha: testData.content.sha
+            })
+        });
+
+        console.log('Token 验证完成，所有权限正常');
+        return {
+            valid: true,
+            hasWritePermission: true,
+            repoName: repoData.name,
+            repoOwner: repoData.owner.login
+        };
+    } catch (error) {
+        console.error('Token 验证异常:', error);
+        return {
+            valid: false,
+            error: error.message
+        };
+    }
 }
 
 // 加载用户数据
@@ -415,35 +545,68 @@ function showPage(pageName) {
 // 处理登录
 async function handleLogin(e) {
     e.preventDefault();
-    
+
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
-    
+
     const user = allUsers.find(u => u.email === email && u.password === password);
-    
+
     if (!user) {
         alert('邮箱或密码错误');
         return;
     }
-    
+
     if (user.status !== 'approved') {
         alert('账号未通过审核');
         return;
     }
-    
+
     if (!getGitHubToken()) {
         const token = prompt('请输入GitHub Personal Access Token (用于保存数据):');
         if (token) {
+            // 验证Token
+            console.log('开始验证Token...');
+            const validation = await validateGitHubToken(token);
+
+            if (!validation.valid) {
+                alert(`Token 无效: ${validation.error}\n\n请检查：\n1. Token 是否正确\n2. Token 是否已过期\n3. Token 是否有访问仓库权限`);
+                localStorage.removeItem('github_token');
+                return;
+            }
+
+            if (!validation.hasWritePermission) {
+                alert(`Token 权限不足: ${validation.error}\n\n请确保 Token 有以下权限：\n- Contents: Read and Write\n\n仓库: ${validation.repoOwner}/${validation.repoName}`);
+                localStorage.removeItem('github_token');
+                return;
+            }
+
             setGitHubToken(token);
+            alert(`Token 验证成功！\n\n仓库: ${validation.repoOwner}/${validation.repoName}\n权限: 读取 + 写入`);
         } else {
             alert('需要GitHub Token才能完整使用功能');
         }
+    } else {
+        // 验证已保存的Token
+        const existingToken = getGitHubToken();
+        const validation = await validateGitHubToken(existingToken);
+
+        if (!validation.valid) {
+            alert(`已保存的 Token 无效: ${validation.error}\n\n请重新输入有效的 Token`);
+            localStorage.removeItem('github_token');
+            return;
+        }
+
+        if (!validation.hasWritePermission) {
+            alert(`已保存的 Token 权限不足: ${validation.error}\n\n请重新创建有写入权限的 Token`);
+            localStorage.removeItem('github_token');
+            return;
+        }
     }
-    
+
     currentUser = user;
     localStorage.setItem('currentUser', JSON.stringify(user));
     updateAuthUI();
-    
+
     alert('登录成功');
     showPage('home');
     document.getElementById('loginForm').reset();
