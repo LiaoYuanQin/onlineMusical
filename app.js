@@ -37,6 +37,20 @@ async function fetchGitHubFile(path) {
     }
 }
 
+// Unicode 字符串转 Base64
+function utf8ToBase64(str) {
+    try {
+        // 使用 encodeURIComponent 将字符串转换为 UTF-8，然后再编码
+        const utf8Str = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+            return String.fromCharCode(parseInt(p1, 16));
+        });
+        return btoa(utf8Str);
+    } catch (error) {
+        console.error('Base64 编码失败:', error);
+        throw new Error('编码失败，请检查内容是否包含特殊字符');
+    }
+}
+
 // 保存文本文件到GitHub
 async function saveGitHubFile(path, content, message) {
     try {
@@ -67,6 +81,10 @@ async function saveGitHubFile(path, content, message) {
             throw new Error(`获取文件信息失败: ${response.status} - ${errorText}`);
         }
 
+        // 使用支持 Unicode 的编码方法
+        const contentJson = JSON.stringify(content, null, 2);
+        const base64Content = utf8ToBase64(contentJson);
+
         const putResponse = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`, {
             method: 'PUT',
             headers: {
@@ -75,7 +93,7 @@ async function saveGitHubFile(path, content, message) {
             },
             body: JSON.stringify({
                 message: message,
-                content: btoa(JSON.stringify(content, null, 2)),
+                content: base64Content,
                 sha: sha
             })
         });
@@ -168,13 +186,28 @@ async function uploadBinaryFile(file, path) {
     });
 }
 
+// Base64 转 Unicode 字符串
+function base64ToUtf8(str) {
+    try {
+        // 先解码 Base64，然后转换为 UTF-8
+        const decoded = atob(str);
+        return decodeURIComponent(decoded.split('').map(c => {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+    } catch (error) {
+        console.error('Base64 解码失败:', error);
+        throw new Error('解码失败');
+    }
+}
+
 // 从GitHub下载文件
 async function downloadFileFromGitHub(path) {
     try {
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${path}`);
         if (!response.ok) throw new Error('文件不存在');
         const data = await response.json();
-        const content = atob(data.content);
+        // 使用支持 Unicode 的解码方法
+        const content = base64ToUtf8(data.content);
         return content;
     } catch (error) {
         console.error('下载文件失败:', error);
