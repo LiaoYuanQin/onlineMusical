@@ -790,8 +790,10 @@ function showKnowledgeDetail(id) {
                 <div class="attachment-list">
                     ${item.files.map((file, index) => {
                         const isImg = isImageType(file.type);
+                        // 使用单引号包裹 onclick，避免与 JSON 中的双引号冲突
+                        const filesJson = JSON.stringify(item.files).replace(/'/g, "\\'");
                         return `
-                            <div class="attachment-item" onclick="openFullscreen([${item.files.map(f => JSON.stringify(f)).join(',')}], ${index})">
+                            <div class="attachment-item" onclick='openFullscreen(${filesJson}, ${index})'>
                                 ${isImg ? `
                                     <img src="${file.downloadUrl}" class="attachment-image" alt="${escapeHtml(file.name)}" />
                                 ` : `
