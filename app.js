@@ -419,10 +419,14 @@ async function loadKnowledge() {
             }
         }
         
-        allKnowledge.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        allKnowledge.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        
+        // 只保留最新的10条
+        allKnowledge = allKnowledge.slice(0, 10);
+        
         console.log('=== 知识数据加载完成 ===');
         console.log('总共加载知识数量:', allKnowledge.length);
-        console.log('知识列表:', allKnowledge.map(k => ({ id: k.id, title: k.title, author: k.author })));
+        console.log('知识列表:', allKnowledge.map(k => ({ id: k.id, title: k.title, author: k.author, updatedAt: k.updatedAt })));
         
     } catch (error) {
         console.error('加载知识失败:', error);
@@ -743,8 +747,13 @@ function logout() {
 }
 
 // 渲染知识列表
-function renderKnowledgeList(knowledgeList) {
-    const container = document.getElementById('knowledgeList');
+function renderKnowledgeList(knowledgeList, containerId = 'knowledgeList') {
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.error('找不到容器:', containerId);
+        return;
+    }
     
     if (knowledgeList.length === 0) {
         container.innerHTML = '<div class="loading">暂无知识内容</div>';
@@ -766,7 +775,7 @@ function renderKnowledgeList(knowledgeList) {
                 ${hasAttachments ? `<div class="knowledge-meta">📎 ${item.files.length} 个附件</div>` : ''}
                 <div class="knowledge-meta">
                     <span>👤 ${escapeHtml(authorName)}</span>
-                    <span>📅 ${formatDate(item.createdAt)}</span>
+                    <span>📅 ${formatDate(item.updatedAt)}</span>
                 </div>
             </div>
         `;
@@ -997,18 +1006,25 @@ function downloadFile(content, filename, mimeType) {
 function searchKnowledge() {
     const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
     
+    console.log('=== 搜索知识 ===');
+    console.log('搜索关键词:', keyword);
+    
     if (!keyword) {
-        renderKnowledgeList(allKnowledge);
+        renderKnowledgeList(allKnowledge, 'searchResults');
         return;
     }
     
     const results = allKnowledge.filter(item => 
         item.title.toLowerCase().includes(keyword) ||
         item.description.toLowerCase().includes(keyword) ||
-        item.content.toLowerCase().includes(keyword)
+        item.content.toLowerCase().includes(keyword) ||
+        item.tags.some(tag => tag.toLowerCase().includes(keyword))
     );
     
-    renderKnowledgeList(results);
+    console.log('搜索结果数量:', results.length);
+    console.log('搜索结果:', results.map(r => ({ id: r.id, title: r.title })));
+    
+    renderKnowledgeList(results, 'searchResults');
 }
 
 // 处理创建知识
