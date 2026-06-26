@@ -878,6 +878,7 @@ function showKnowledgeDetail(id) {
         <div class="detail-actions">
             <button onclick="exportKnowledge(${item.id})" class="btn btn-export">📥 导出知识</button>
             ${isOwner ? `
+                <button onclick="editKnowledge(${item.id})" class="btn btn-primary">编辑</button>
                 <button onclick="deleteKnowledge(${item.id})" class="btn btn-danger">删除</button>
             ` : ''}
         </div>
@@ -1072,7 +1073,10 @@ async function handleCreateKnowledge(e) {
         return;
     }
     
-    console.log('=== 开始发布知识 ===');
+    const editId = document.getElementById('editId').value;
+    const isEdit = !!editId;
+    
+    console.log(isEdit ? '=== 开始编辑知识 ===' : '=== 开始发布知识 ===');
     
     const title = document.getElementById('title').value;
     const description = document.getElementById('description').value;
@@ -1085,31 +1089,51 @@ async function handleCreateKnowledge(e) {
     console.log('标签:', tags);
     console.log('当前用户ID:', currentUser.id);
     
-    const newId = allKnowledge.length > 0 ? Math.max(...allKnowledge.map(k => k.id)) + 1 : 1;
-    console.log('新知识ID:', newId);
+    const knowledgeId = isEdit ? parseInt(editId) : (allKnowledge.length > 0 ? Math.max(...allKnowledge.map(k => k.id)) + 1 : 1);
+    console.log(isEdit ? '编辑知识ID:' : '新知识ID:', knowledgeId);
     
-    // 上传附件
+    // 获取原有的创建时间（编辑模式）
+    let createdAt = new Date().toISOString();
+    if (isEdit) {
+        const existing = allKnowledge.find(k => k.id === knowledgeId);
+        if (existing) {
+            createdAt = existing.createdAt.toISOString();
+        }
+    }
+    
+    // 上传附件（只上传新文件，保留已上传的）
     const uploadedFileInfo = [];
-    console.log('开始上传附件，数量:', uploadedFiles.length);
+    console.log('开始处理附件，数量:', uploadedFiles.length);
     
     for (let i = 0; i < uploadedFiles.length; i++) {
         const fileInfo = uploadedFiles[i];
         try {
-            console.log(`正在上传第 ${i + 1}/${uploadedFiles.length} 个文件:`, fileInfo.name);
-            const filePath = `${CONFIG.ATTACHMENTS_DIR}/${newId}/${fileInfo.name}`;
-            console.log('文件路径:', filePath);
-            
-            const result = await uploadBinaryFile(fileInfo.file, filePath);
-            console.log('文件上传成功:', result);
-            
-            uploadedFileInfo.push({
-                name: fileInfo.name,
-                size: fileInfo.size,
-                type: fileInfo.type,
-                path: filePath,
-                downloadUrl: result.content.download_url
-            });
-            console.log('附件信息已添加:', uploadedFileInfo[i]);
+            if (fileInfo.isUploaded) {
+                console.log(`附件 ${fileInfo.name} 已上传，跳过`);
+                uploadedFileInfo.push({
+                    name: fileInfo.name,
+                    size: fileInfo.size,
+                    type: fileInfo.type,
+                    path: fileInfo.path,
+                    downloadUrl: fileInfo.downloadUrl
+                });
+            } else {
+                console.log(`正在上传第 ${i + 1}/${uploadedFiles.length} 个文件:`, fileInfo.name);
+                const filePath = `${CONFIG.ATTACHMENTS_DIR}/${knowledgeId}/${fileInfo.name}`;
+                console.log('文件路径:', filePath);
+                
+                const result = await uploadBinaryFile(fileInfo.file, filePath);
+                console.log('文件上传成功:', result);
+                
+                uploadedFileInfo.push({
+                    name: fileInfo.name,
+                    size: fileInfo.size,
+                    type: fileInfo.type,
+                    path: filePath,
+                    downloadUrl: result.content.download_url
+                });
+                console.log('附件信息已添加:', uploadedFileInfo[i]);
+            }
         } catch (error) {
             console.error('上传附件失败:', error);
             alert(`上传文件 ${fileInfo.name} 失败: ${error.message}`);
@@ -1117,14 +1141,14 @@ async function handleCreateKnowledge(e) {
         }
     }
     
-    console.log('所有附件上传完成');
+    console.log('所有附件处理完成');
     
     const mdContent = `---
 title: "${title}"
 description: "${description}"
 tags: ${JSON.stringify(tags)}
 author: ${currentUser.id}
-createdAt: ${new Date().toISOString()}
+createdAt: ${createdAt}
 updatedAt: ${new Date().toISOString()}
 files: ${JSON.stringify(uploadedFileInfo)}
 ---
@@ -1148,44 +1172,112 @@ ${uploadedFileInfo.map(f => `- [${f.name}](${f.downloadUrl})`).join('\n')}` : ''
     console.log('准备保存到 GitHub...');
     
     try {
-        const fileName = `${CONFIG.KNOWLEDGE_DIR}/${newId}.md`;
+        const fileName = `${CONFIG.KNOWLEDGE_DIR}/${knowledgeId}.md`;
         console.log('保存文件名:', fileName);
         
-        const saveResult = await saveGitHubFile(fileName, mdContent, `创建知识: ${title}`);
+        const saveResult = await saveGitHubFile(fileName, mdContent, isEdit ? `更新知识: ${title}` : `创建知识: ${title}`);
         console.log('文件保存结果:', saveResult);
         
         if (saveResult) {
             console.log('GitHub 保存成功，文件 URL:', saveResult.content.download_url);
             
-            allKnowledge.unshift({
-                id: newId,
-                title,
-                description,
-                content,
-                tags,
-                author: currentUser.id,
-                files: uploadedFileInfo,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            });
-            
-            console.log('本地知识列表已更新，当前总数:', allKnowledge.length);
-            console.log('=== 知识发布完成 ===');
-            
-            alert('知识发布成功');
+            if (isEdit) {
+                const index = allKnowledge.findIndex(k => k.id === knowledgeId);
+                if (index !== -1) {
+                    allKnowledge[index] = {
+                        id: knowledgeId,
+                        title,
+                        description,
+                        content,
+                        tags,
+                        author: currentUser.id,
+                        files: uploadedFileInfo,
+                        createdAt: new Date(createdAt),
+                        updatedAt: new Date()
+                    };
+                }
+                console.log('本地知识列表已更新，当前总数:', allKnowledge.length);
+                console.log('=== 知识编辑完成 ===');
+                alert('知识更新成功');
+            } else {
+                allKnowledge.unshift({
+                    id: knowledgeId,
+                    title,
+                    description,
+                    content,
+                    tags,
+                    author: currentUser.id,
+                    files: uploadedFileInfo,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                });
+                
+                console.log('本地知识列表已更新，当前总数:', allKnowledge.length);
+                console.log('=== 知识发布完成 ===');
+                alert('知识发布成功');
+            }
             
             uploadedFiles = [];
             document.getElementById('knowledgeForm').reset();
+            document.getElementById('editId').value = '';
             renderUploadedFiles();
+            
+            const createPageTitle = document.querySelector('#createPage h2');
+            if (createPageTitle) {
+                createPageTitle.textContent = '✍️ 发布知识';
+            }
+            
+            const submitBtn = document.querySelector('#knowledgeForm button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.textContent = '发布知识';
+            }
+            
             showPage('home');
         } else {
             console.error('GitHub 保存失败，返回结果为空');
-            alert('发布失败，请检查网络连接');
+            alert(isEdit ? '更新失败，请检查网络连接' : '发布失败，请检查网络连接');
         }
         
     } catch (error) {
         console.error('发布知识失败:', error);
         alert('发布失败: ' + error.message);
+    }
+}
+
+// 编辑知识
+function editKnowledge(id) {
+    const item = allKnowledge.find(k => k.id === id);
+    if (!item) {
+        alert('知识不存在');
+        return;
+    }
+    
+    document.getElementById('editId').value = item.id;
+    document.getElementById('title').value = item.title;
+    document.getElementById('description').value = item.description;
+    document.getElementById('content').value = item.content;
+    document.getElementById('tags').value = item.tags.join(', ');
+    
+    uploadedFiles = item.files.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        file: null,
+        downloadUrl: f.downloadUrl,
+        isUploaded: true
+    }));
+    
+    renderUploadedFiles();
+    showPage('create');
+    
+    const createPageTitle = document.querySelector('#createPage h2');
+    if (createPageTitle) {
+        createPageTitle.textContent = '✏️ 编辑知识';
+    }
+    
+    const submitBtn = document.querySelector('#knowledgeForm button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.textContent = '保存修改';
     }
 }
 
