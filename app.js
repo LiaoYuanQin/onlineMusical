@@ -345,9 +345,18 @@ async function loadKnowledge() {
         console.log('知识目录:', CONFIG.KNOWLEDGE_DIR);
         
         const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}`);
+        
+        if (response.status === 404) {
+            console.log('知识目录不存在，这是正常情况，将使用空列表');
+            allKnowledge = [];
+            console.log('=== 知识数据加载完成 ===');
+            console.log('总共加载知识数量:', allKnowledge.length);
+            return;
+        }
+        
         if (!response.ok) {
-            console.error('知识目录不存在，响应状态:', response.status);
-            throw new Error('知识目录不存在');
+            console.error('获取知识目录失败，响应状态:', response.status);
+            throw new Error('获取知识目录失败');
         }
         
         const files = await response.json();
@@ -610,9 +619,22 @@ function showPage(pageName) {
         targetPage.style.display = 'block';
     }
     
+    // 更新导航链接状态
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        const href = link.getAttribute('onclick');
+        if (href && href.includes(pageName)) {
+            link.classList.add('active');
+        }
+    });
+    
+    // 关闭移动端菜单
+    document.getElementById('navMenu').classList.remove('active');
+    
     switch(pageName) {
         case 'home':
             renderKnowledgeList(allKnowledge);
+            updateStats();
             break;
         case 'admin':
             if (currentUser && currentUser.role === 'admin') {
@@ -631,6 +653,20 @@ function showPage(pageName) {
             renderUploadedFiles();
             break;
     }
+}
+
+function toggleMobileMenu() {
+    const navMenu = document.getElementById('navMenu');
+    navMenu.classList.toggle('active');
+}
+
+function updateStats() {
+    document.getElementById('knowledgeCount').textContent = allKnowledge.length;
+    document.getElementById('userCount').textContent = allUsers.filter(u => u.status === 'approved').length;
+    
+    const allTags = new Set();
+    allKnowledge.forEach(k => k.tags.forEach(t => allTags.add(t)));
+    document.getElementById('tagCount').textContent = allTags.size;
 }
 
 // 处理登录
