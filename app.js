@@ -319,12 +319,28 @@ async function validateGitHubToken(token) {
     }
 }
 
-// 加载用户数据
+// 加载用户数据（无token时使用默认管理员数据）
 async function loadUsers() {
-    const users = await fetchGitHubFile(CONFIG.USERS_FILE);
-    if (users) {
-        allUsers = users;
-    } else {
+    try {
+        console.log('=== 开始加载用户数据 ===');
+        const users = await fetchGitHubFile(CONFIG.USERS_FILE);
+        if (users) {
+            allUsers = users;
+            console.log('用户数据加载成功，数量:', allUsers.length);
+        } else {
+            console.log('用户数据文件不存在，使用默认数据');
+            allUsers = [{
+                id: 1,
+                username: 'admin',
+                email: 'admin@example.com',
+                password: 'admin123',
+                role: 'admin',
+                status: 'approved',
+                createdAt: new Date().toISOString()
+            }];
+        }
+    } catch (error) {
+        console.warn('加载用户数据失败（可能是仓库私有或无权限），使用默认数据:', error.message);
         allUsers = [{
             id: 1,
             username: 'admin',
@@ -334,17 +350,32 @@ async function loadUsers() {
             status: 'approved',
             createdAt: new Date().toISOString()
         }];
-        await saveGitHubFile(CONFIG.USERS_FILE, allUsers, '初始化用户数据');
     }
 }
 
-// 加载知识数据
+// 加载知识数据（公开访问，无需登录）
 async function loadKnowledge() {
     try {
         console.log('=== 开始从 GitHub 加载知识数据 ===');
         console.log('知识目录:', CONFIG.KNOWLEDGE_DIR);
         
-        const response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}`);
+        const repoParts = CONFIG.GITHUB_REPO.split('/');
+        const owner = repoParts[0];
+        const repoName = repoParts[1];
+        const rawBaseUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/main`;
+        
+        console.log('Raw基础URL:', rawBaseUrl);
+        
+        let response;
+        const token = getGitHubToken();
+        
+        if (token) {
+            response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}`, {
+                headers: { 'Authorization': `token ${token}` }
+            });
+        } else {
+            response = await fetch(`${CONFIG.GITHUB_API_BASE}/${CONFIG.GITHUB_REPO}/contents/${CONFIG.KNOWLEDGE_DIR}`);
+        }
         
         if (response.status === 404) {
             console.log('知识目录不存在，这是正常情况，将使用空列表');
@@ -356,6 +387,9 @@ async function loadKnowledge() {
         
         if (!response.ok) {
             console.error('获取知识目录失败，响应状态:', response.status);
+            if (response.status === 401 || response.status === 403) {
+                console.log('仓库可能是私有的，需要登录才能访问');
+            }
             throw new Error('获取知识目录失败');
         }
         
@@ -369,15 +403,16 @@ async function loadKnowledge() {
             if (file.name.endsWith('.md')) {
                 try {
                     console.log('正在解析文件:', file.name);
-                    const fileResponse = await fetch(file.url);
-                    const fileData = await fileResponse.json();
                     
-                    // 使用支持 Unicode 的解码方法
-                    const content = base64ToUtf8(fileData.content);
+                    const rawFileUrl = `${rawBaseUrl}/${CONFIG.KNOWLEDGE_DIR}/${file.name}`;
+                    console.log('使用Raw URL加载:', rawFileUrl);
+                    
+                    const fileResponse = await fetch(rawFileUrl);
+                    const content = await fileResponse.text();
+                    
                     console.log('文件内容长度:', content.length);
                     console.log('文件内容前200字符:', content.substring(0, 200));
                     
-                    // 尝试匹配 YAML front matter
                     const match = content.match(/^---\n([\s\S]*?)\n---/);
                     if (match) {
                         console.log('找到 YAML front matter');
@@ -430,17 +465,21 @@ async function loadKnowledge() {
         
         allKnowledge.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         
-        // 只保留最新的10条
         allKnowledge = allKnowledge.slice(0, 10);
         
         console.log('=== 知识数据加载完成 ===');
         console.log('总共加载知识数量:', allKnowledge.length);
         console.log('知识列表:', allKnowledge.map(k => ({ id: k.id, title: k.title, author: k.author, updatedAt: k.updatedAt })));
         
+        renderKnowledgeList(allKnowledge);
+        updateStats();
+        
     } catch (error) {
         console.error('加载知识失败:', error);
         console.log('将使用空的知识列表');
         allKnowledge = [];
+        renderKnowledgeList(allKnowledge);
+        updateStats();
     }
 }
 
